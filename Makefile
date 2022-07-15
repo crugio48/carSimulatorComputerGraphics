@@ -3,6 +3,8 @@ CFLAGS = -std=c++17 -O2
 LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXrandr -lXi -lXxf86vm
 
 carSim_exec: carSimulator.cpp
+	glslc shaders/shader.vert -o shaders/vert.spv
+	glslc shaders/shader.frag -o shaders/frag.spv
 	g++ $(CFLAGS) -o carSim_exec carSimulator.cpp $(LDFLAGS)
 	
 	
