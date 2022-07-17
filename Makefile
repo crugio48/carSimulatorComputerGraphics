@@ -1,6 +1,8 @@
-CFLAGS = -std=c++17 -O2
+CFLAGS = -std=c++17 -O2 -I$(HEADERS_INCLUDE_PATH)
 
 LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXrandr -lXi -lXxf86vm
+
+HEADERS_INCLUDE_PATH = ./headers
 
 carSim_exec: carSimulator.cpp
 	glslc shaders/shader.vert -o shaders/vert.spv
