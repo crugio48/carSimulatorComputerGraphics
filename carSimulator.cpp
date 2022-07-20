@@ -1,7 +1,7 @@
 #include "VulkanApp.hpp"
 
-const std::string MODEL_PATH = "models/viking_room.obj";
-const std::string TEXTURE_PATH = "textures/viking_room.png";
+const std::string MODEL_PATH = "models/coloredCube.obj";
+const std::string TEXTURE_PATH = "textures/Cube texture.png";
 
 // The uniform buffer objects used
 struct UniformBufferObject {
