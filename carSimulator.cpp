@@ -1,7 +1,7 @@
 #include "VulkanApp.hpp"
 
-const std::string MODEL_PATH = "models/coloredCube.obj";
-const std::string TEXTURE_PATH = "textures/Cube texture.png";
+const std::string MODEL_PATH = "models/Hummer.obj";
+const std::string TEXTURE_PATH = "textures/HummerDiff.png";
 
 // The uniform buffer objects used
 struct UniformBufferObject {
@@ -135,8 +135,9 @@ class MyProject : public BaseProject {
 					
 		UniformBufferObject ubo{};
 		ubo.model = glm::rotate(glm::mat4(1.0f),
-								time * glm::radians(90.0f),
-								glm::vec3(0.0f, 0.0f, 1.0f));
+								time * glm::radians(30.0f),
+								glm::vec3(0.0f, 0.0f, 1.0f)) *
+					glm::scale(glm::mat4(1), glm::vec3(0.5,0.5,0.5));
 		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f),
 							   glm::vec3(0.0f, 0.0f, 0.0f),
 							   glm::vec3(0.0f, 0.0f, 1.0f));
