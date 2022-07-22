@@ -1,6 +1,6 @@
 #include "VulkanApp.hpp"
 
-const std::string CAR_MODEL_PATH = "models/car m1.obj";
+const std::string CAR_MODEL_PATH = "models/car m1v2.obj";
 const std::string CAR_TEXTURE_PATH = "textures/car m1 texture.png";
 
 const std::string TERRAIN_MODEL_PATH = "models/flatTerrain.obj";
@@ -30,8 +30,14 @@ struct MovementInfo {
 	float acceleration;
 	float velocity;
 
-	glm::mat4 carRotationMatrix;
+	float angX;    //pitch
+	float angY;    //yaw
+	float angZ;    //roll
+	glm::mat4 carRotation;
 	glm::vec3 carDirection;
+
+
+	glm::mat4 terrainTransform; //to keep const value of terrain placement
 
 	void init(){
 		carPosition = glm::vec3(0,0,0);
@@ -41,8 +47,18 @@ struct MovementInfo {
 		acceleration = 0;
 		velocity = 0;
 
-		carRotationMatrix = glm::rotate(glm::mat4(1.0), glm::radians(-90.0f), glm::vec3(1,0,0)); //initial facing direction
-		carDirection = glm::vec3(0,0,-1);
+		angX = 0;
+		angY = 0;
+		angZ = 0;
+		carRotation= glm::rotate(glm::mat4(1), glm::radians(angZ), glm::vec3(0,0,1))*
+					 glm::rotate(glm::mat4(1), glm::radians(angX), glm::vec3(1,0,0))*
+					 glm::rotate(glm::mat4(1), glm::radians(angY), glm::vec3(0,1,0)); //initial rotation
+		carDirection = glm::vec3(0,0,-1);   //initial direction
+
+
+		terrainTransform = glm::translate(glm::mat4(1), glm::vec3(0,-3,0)) * 
+						   glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(1,0,0)) *
+						   glm::scale(glm::mat4(1), glm::vec3(100,100,100));
 	}
 };
 
@@ -79,8 +95,8 @@ class MyProject : public BaseProject {
      */
 	void setWindowParameters() {
 		// window size, title and initial background
-		windowWidth = 1600;
-		windowHeight = 1200;
+		windowWidth = 800;
+		windowHeight = 600;
 		windowTitle = "Car simulator";
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
 		
@@ -230,15 +246,20 @@ class MyProject : public BaseProject {
 	 */
 	void updateUniformBuffer(uint32_t currentImage) {
 		static auto startTime = std::chrono::high_resolution_clock::now();
+		static float lastTime = 0;
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		float time = std::chrono::duration<float, std::chrono::seconds::period>
 					(currentTime - startTime).count();
+		float deltaT = time - lastTime;
+		lastTime = time;
 
 		static float aspectRatio = ((float) swapChainExtent.width) / (float) swapChainExtent.height;
+		static float nearPlane = 0.1;
+		static float farPlane = 30;
 
 
 		
-		updateMovementInfo(time);
+		updateMovementInfo(deltaT);
 
 					
 		GlobalUniformBufferObject gubo{};
@@ -248,9 +269,9 @@ class MyProject : public BaseProject {
 		gubo.view = glm::lookAt(movInfo.cameraPosition, movInfo.carPosition, movInfo.upVector);
 
 		gubo.proj = glm::perspective(glm::radians(90.0f), 
-									aspectRatio, 
-									0.1f, 
-									10.0f);
+									aspectRatio,
+									nearPlane,
+									farPlane);
 		gubo.proj[1][1] *= -1;
 
 		// Here is where you actually update your uniforms
@@ -263,8 +284,7 @@ class MyProject : public BaseProject {
 
 
 		ubo.model = glm::translate(glm::mat4(1), movInfo.carPosition) * 
-					movInfo.carRotationMatrix *
-					glm::scale(glm::mat4(1), glm::vec3(0.4,0.4,0.4));
+					movInfo.carRotation;
 
 		vkMapMemory(device, carDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo), 0, &data);
 		    memcpy(data, &ubo, sizeof(ubo));
@@ -274,9 +294,7 @@ class MyProject : public BaseProject {
 
 		///////////////////////////// terrain 
 
-		ubo.model = glm::translate(glm::mat4(1), glm::vec3(0,-3,0)) * 
-					glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(1,0,0)) *
-					glm::scale(glm::mat4(1), glm::vec3(10,10,10));
+		ubo.model = movInfo.terrainTransform;
 
 		vkMapMemory(device, terrainDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo), 0, &data);
 		    memcpy(data, &ubo, sizeof(ubo));
@@ -292,8 +310,8 @@ class MyProject : public BaseProject {
 	 */
 	void updateMovementInfo(float deltaTime) {
 
-		glm::vec3 oldCarPosition = movInfo.carPosition;
-		glm::vec3 oldCarDirection = movInfo.carDirection;
+		float step = deltaTime * 1;
+		float rotStep = deltaTime * 45;
 
 		//user input
 		int A = glfwGetKey(window, GLFW_KEY_A);  // true(1) if button A pressed
@@ -303,10 +321,10 @@ class MyProject : public BaseProject {
 
 
 		//compute acceleration
-		if (W && !S) {
+		if (W and !S) {
 			movInfo.acceleration = +10;
 		}
-		else if (S && !W) {
+		else if (S and !W) {
 			movInfo.acceleration = -10;
 		}
 		else {
@@ -315,21 +333,72 @@ class MyProject : public BaseProject {
 
 
 		//compute velocity
-		movInfo.velocity += movInfo.acceleration * deltaTime;
+		movInfo.velocity += movInfo.acceleration * step;
 
+/*
 		//simulating friction
-		if (movInfo.velocity >= 0.3 || movInfo.velocity <= -0.3) {
-			movInfo.velocity *= 0.99;
+		if (movInfo.velocity >= 0.001 or movInfo.velocity <= -0.001) {
+			movInfo.velocity *= 0.9;
 		}
 		else {
 			movInfo.velocity = 0;
 		}
+*/
 
-		//compute position and direction
-		if (movInfo.velocity != 0) {
+		std::cout << movInfo.velocity << "\n";
 
+
+		//compute direction
+		if (movInfo.velocity > 0) {
+			if (A and !D) {
+				movInfo.angY += rotStep;
+			}
+			else if (D and !A) {
+				movInfo.angY -= rotStep;
+			}
+		}
+		else if (movInfo.velocity < 0) {
+			if (A and !D) {
+				movInfo.angY -= rotStep;
+			}
+			else if (D and !A) {
+				movInfo.angY += rotStep;
+			}
 		}
 
+		//compute direction
+		glm::vec4 tempDirection = glm::vec4(0,0,-1,0);   //starting position of direction
+		tempDirection = glm::rotate(glm::mat4(1), glm::radians(movInfo.angZ), glm::vec3(0,0,1))*
+						glm::rotate(glm::mat4(1), glm::radians(movInfo.angX), glm::vec3(1,0,0))*
+					    glm::rotate(glm::mat4(1), glm::radians(movInfo.angY), glm::vec3(0,1,0))*
+					    tempDirection;
+		
+		movInfo.carDirection.x = tempDirection.x;
+		movInfo.carDirection.y = tempDirection.y;
+		movInfo.carDirection.z = tempDirection.z;
+
+		movInfo.carDirection = glm::normalize(movInfo.carDirection);
+
+		std::cout << movInfo.carDirection.x << " " << movInfo.carDirection.y << " " << movInfo.carDirection.z << " " << "\n";
+
+
+
+		//compute position
+		movInfo.carPosition += movInfo.velocity * step * movInfo.carDirection;
+
+		std::cout << movInfo.carPosition.x << " " << movInfo.carPosition.y << " " << movInfo.carPosition.z << " " << "\n";
+
+
+
+		//compute angX and angZ with terrainNormal
+		//TODO
+
+
+
+		//update rotation
+		movInfo.carRotation = glm::rotate(glm::mat4(1), glm::radians(movInfo.angZ), glm::vec3(0,0,1))*
+							  glm::rotate(glm::mat4(1), glm::radians(movInfo.angX), glm::vec3(1,0,0))*
+							  glm::rotate(glm::mat4(1), glm::radians(movInfo.angY), glm::vec3(0,1,0));
 
 
 		
