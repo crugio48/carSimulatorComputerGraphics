@@ -3,8 +3,8 @@
 const std::string CAR_MODEL_PATH = "models/car m1v2.obj";
 const std::string CAR_TEXTURE_PATH = "textures/car m1 texture.png";
 
-const std::string TERRAIN_MODEL_PATH = "models/flatTerrain.obj";
-const std::string TERRAIN_TEXTURE_PATH = "textures/terrainTex.jpeg";
+const std::string TERRAIN_MODEL_PATH = "models/terrain3d.obj";
+const std::string TERRAIN_TEXTURE_PATH = "textures/myGroundTexture.png";
 
 const std::string VERTEX_SHADER_PATH = "shaders/vert.spv";
 const std::string FRAGMENT_SHADER_PATH = "shaders/frag.spv";
@@ -20,6 +20,50 @@ struct UniformBufferObject {
 	alignas(16) glm::mat4 model;
 };
 
+
+//Struct for height and normal map
+struct ImageInfo {
+
+	stbi_uc* pixels;
+	int imageWidth, imageHeight, imageChannels;
+
+    float maxHeight;
+
+	void initImage(std::string file, float maxHeightOfMap) {
+		pixels = stbi_load(file.c_str(), &imageWidth, &imageHeight, &imageChannels, STBI_rgb_alpha);
+
+		if (!pixels) {
+			throw std::runtime_error("failed to load texture image!");
+		}
+
+        maxHeight = maxHeightOfMap;
+	}
+	
+	void GetPixelColors(size_t x, size_t y, float *red, float *green, float *blue) {
+		stbi_uc r = pixels[4 * (y * imageWidth + x) + 0];
+		stbi_uc g = pixels[4 * (y * imageWidth + x) + 1];
+		stbi_uc b = pixels[4 * (y * imageWidth + x) + 2];
+
+        *red = ((float) r) / 255.0f;
+        *green = ((float) g) / 255.0f;
+        *blue = ((float) b) / 255.0f;
+
+	}
+
+	void GetHeightValue(size_t x, size_t y, float *height) {
+		stbi_uc h = pixels[4 * (y * imageWidth + x) + 0];
+		//*g = pixels[4 * (y * imageWidth + x) + 1];
+		//*b = pixels[4 * (y * imageWidth + x) + 2];
+
+		//fo height map r,g,b should all have the same value
+
+        *height = ((float) h) * (maxHeight / 255.0f);
+	}
+
+	void cleanup(){
+		stbi_image_free(pixels);
+	}
+};
 
 //movement struct
 struct MovementInfo {
@@ -56,9 +100,9 @@ struct MovementInfo {
 		carDirection = glm::vec3(0,0,-1);   //initial direction
 
 
-		terrainTransform = glm::translate(glm::mat4(1), glm::vec3(0,-3,0)) * 
-						   glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(1,0,0)) *
-						   glm::scale(glm::mat4(1), glm::vec3(100,100,100));
+		terrainTransform = glm::translate(glm::mat4(1), glm::vec3(0,0,0)) * 
+						   glm::rotate(glm::mat4(1), glm::radians(0.0f), glm::vec3(1,0,0)) *
+						   glm::scale(glm::mat4(1), glm::vec3(1,1,1));
 	}
 };
 
@@ -310,7 +354,6 @@ class MyProject : public BaseProject {
 	 */
 	void updateMovementInfo(float deltaTime) {
 
-		float step = deltaTime * 1;
 		float rotStep = deltaTime * 45;
 
 		//user input
@@ -331,19 +374,21 @@ class MyProject : public BaseProject {
 			movInfo.acceleration = 0;
 		}
 
-
 		//compute velocity
-		movInfo.velocity += movInfo.acceleration * step;
+		movInfo.velocity += movInfo.acceleration * deltaTime;
 
-/*
+
 		//simulating friction
-		if (movInfo.velocity >= 0.001 or movInfo.velocity <= -0.001) {
-			movInfo.velocity *= 0.9;
+		if (movInfo.acceleration == 0) {
+
+			if (movInfo.velocity >= 0.5 or movInfo.velocity <= -0.5) {
+				movInfo.velocity *= 0.9999;
+			}
+			else {
+				movInfo.velocity = 0;
+			}
 		}
-		else {
-			movInfo.velocity = 0;
-		}
-*/
+
 
 		std::cout << movInfo.velocity << "\n";
 
@@ -384,7 +429,7 @@ class MyProject : public BaseProject {
 
 
 		//compute position
-		movInfo.carPosition += movInfo.velocity * step * movInfo.carDirection;
+		movInfo.carPosition += movInfo.velocity * deltaTime * movInfo.carDirection;
 
 		std::cout << movInfo.carPosition.x << " " << movInfo.carPosition.y << " " << movInfo.carPosition.z << " " << "\n";
 
@@ -401,26 +446,50 @@ class MyProject : public BaseProject {
 							  glm::rotate(glm::mat4(1), glm::radians(movInfo.angY), glm::vec3(0,1,0));
 
 
-		
+
+		//get camera controller input
 		int upArrow = glfwGetKey(window, GLFW_KEY_UP);  // true(1) if button up arrow pressed
 		int downArrow = glfwGetKey(window, GLFW_KEY_DOWN);  // true(1) if button down arrow pressed
 		int leftArrow = glfwGetKey(window, GLFW_KEY_LEFT);  // true(1) if button left arrow pressed
 		int rightArrow = glfwGetKey(window, GLFW_KEY_RIGHT);  // true(1) if button right arrow pressed
 
+		//update camera position
 		if (upArrow) {
-			movInfo.cameraPosition = movInfo.carPosition + glm::vec3(0,2,-2);
+			movInfo.cameraPosition = movInfo.carPosition + 2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
 		}
 		else if (downArrow) {
-			movInfo.cameraPosition = movInfo.carPosition + glm::vec3(0,2,2);
+			movInfo.cameraPosition = movInfo.carPosition + -2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
 		}
 		else if (leftArrow) {
-			movInfo.cameraPosition = movInfo.carPosition + glm::vec3(-2,2,0);
+			tempDirection = glm::vec4(movInfo.carDirection.x,
+									  movInfo.carDirection.y,
+									  movInfo.carDirection.z,
+									  0);
+			tempDirection = glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(0,1,0))*
+							tempDirection;
+			glm::vec3 perpendicularDirection = glm::vec3(tempDirection.x,
+														 tempDirection.y,
+														 tempDirection.z);
+			perpendicularDirection = glm::normalize(perpendicularDirection);
+
+			movInfo.cameraPosition = movInfo.carPosition + 2.0f * perpendicularDirection + glm::vec3(0,1.5,0);
 		}
 		else if (rightArrow) {
-			movInfo.cameraPosition = movInfo.carPosition + glm::vec3(2,2,0);
+			tempDirection = glm::vec4(movInfo.carDirection.x,
+									  movInfo.carDirection.y,
+									  movInfo.carDirection.z,
+									  0);
+			tempDirection = glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(0,1,0))*
+							tempDirection;
+			glm::vec3 perpendicularDirection = glm::vec3(tempDirection.x,
+														 tempDirection.y,
+														 tempDirection.z);
+			perpendicularDirection = glm::normalize(perpendicularDirection);
+
+			movInfo.cameraPosition = movInfo.carPosition + -2.0f * perpendicularDirection + glm::vec3(0,1.5,0);
 		}
 		else {
-			movInfo.cameraPosition = movInfo.carPosition + glm::vec3(0,2,2);
+			movInfo.cameraPosition = movInfo.carPosition + -2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
 		}
 
 	}
