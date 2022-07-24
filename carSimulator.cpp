@@ -9,6 +9,9 @@ const std::string TERRAIN_TEXTURE_PATH = "textures/myGroundTexture.png";
 const std::string VERTEX_SHADER_PATH = "shaders/vert.spv";
 const std::string FRAGMENT_SHADER_PATH = "shaders/frag.spv";
 
+const std::string HEIGHT_MAP_PATH = "maps/height map.png";
+const std::string NORMAL_MAP_PATH = "maps/final normal map.png";
+
 
 // The uniform buffer objects used
 struct GlobalUniformBufferObject {
@@ -27,19 +30,22 @@ struct ImageInfo {
 	stbi_uc* pixels;
 	int imageWidth, imageHeight, imageChannels;
 
-    float maxHeight;
+    float mapHeight;
+	float mapWidthX, mapWidthZ;  //half width
 
-	void initImage(std::string file, float maxHeightOfMap) {
+	void initImage(std::string file, float maxHeightOfMap, float widthOfMapX, float widthOfMapZ) {
 		pixels = stbi_load(file.c_str(), &imageWidth, &imageHeight, &imageChannels, STBI_rgb_alpha);
 
 		if (!pixels) {
 			throw std::runtime_error("failed to load texture image!");
 		}
 
-        maxHeight = maxHeightOfMap;
+        mapHeight = maxHeightOfMap;
+		mapWidthX = widthOfMapX;
+		mapWidthZ = widthOfMapZ;
 	}
 	
-	void GetPixelColors(size_t x, size_t y, float *red, float *green, float *blue) {
+	void getPixelColors(size_t x, size_t y, float *red, float *green, float *blue) {
 		stbi_uc r = pixels[4 * (y * imageWidth + x) + 0];
 		stbi_uc g = pixels[4 * (y * imageWidth + x) + 1];
 		stbi_uc b = pixels[4 * (y * imageWidth + x) + 2];
@@ -50,14 +56,48 @@ struct ImageInfo {
 
 	}
 
-	void GetHeightValue(size_t x, size_t y, float *height) {
+	glm::vec3 getNormalVector(float xCoord, float zCoord) {
+
+		float temp = xCoord + mapWidthX;
+		size_t x = std::ceil(temp * (2048.0f / 2000.0f));
+
+		temp = zCoord + mapWidthZ;
+		size_t y = std::ceil(temp * (2048.0f / 2000.0f));
+
+		stbi_uc r = pixels[4 * (y * imageWidth + x) + 0];
+		stbi_uc g = pixels[4 * (y * imageWidth + x) + 1];
+		stbi_uc b = pixels[4 * (y * imageWidth + x) + 2];
+
+
+		glm::vec3 returnVector = glm::vec3(  //in vulkan: red = x, blue = y, green = -z
+			((float) r / 255.0f) * 2 - 1.0f,
+			((float) b / 255.0f) * 2 - 1.0f,
+			((float) g / 255.0f) * 2 - 1.0f
+		);
+
+		returnVector = glm::normalize(returnVector);
+
+		return returnVector;
+	}
+
+	float getHeightValue(float xCoord, float zCoord) {
+
+		float temp = xCoord + mapWidthX;
+		size_t x = std::ceil(temp * (2048.0f / 2000.0f));
+
+		temp = zCoord + mapWidthZ;
+		size_t y = std::ceil(temp * (2048.0f / 2000.0f));
+
+
 		stbi_uc h = pixels[4 * (y * imageWidth + x) + 0];
 		//*g = pixels[4 * (y * imageWidth + x) + 1];
 		//*b = pixels[4 * (y * imageWidth + x) + 2];
 
 		//fo height map r,g,b should all have the same value
 
-        *height = ((float) h) * (maxHeight / 255.0f);
+		float height = ((float) h) * (mapHeight / 255.0f);
+
+        return height;
 	}
 
 	void cleanup(){
@@ -83,27 +123,6 @@ struct MovementInfo {
 
 	glm::mat4 terrainTransform; //to keep const value of terrain placement
 
-	void init(){
-		carPosition = glm::vec3(0,0,0);
-		cameraPosition = carPosition + glm::vec3(0, 2, 2);
-		upVector = glm::vec3(0,1,0);
-
-		acceleration = 0;
-		velocity = 0;
-
-		angX = 0;
-		angY = 0;
-		angZ = 0;
-		carRotation= glm::rotate(glm::mat4(1), glm::radians(angZ), glm::vec3(0,0,1))*
-					 glm::rotate(glm::mat4(1), glm::radians(angX), glm::vec3(1,0,0))*
-					 glm::rotate(glm::mat4(1), glm::radians(angY), glm::vec3(0,1,0)); //initial rotation
-		carDirection = glm::vec3(0,0,-1);   //initial direction
-
-
-		terrainTransform = glm::translate(glm::mat4(1), glm::vec3(0,0,0)) * 
-						   glm::rotate(glm::mat4(1), glm::radians(0.0f), glm::vec3(1,0,0)) *
-						   glm::scale(glm::mat4(1), glm::vec3(1,1,1));
-	}
 };
 
 
@@ -133,6 +152,9 @@ class MyProject : public BaseProject {
 	//extra
 	MovementInfo movInfo;
 
+	ImageInfo heightMap;
+	ImageInfo normalMap;
+	
     /**
      * @brief Set the Window Parameters and the pool sizes
      * 
@@ -203,7 +225,11 @@ class MyProject : public BaseProject {
 
 
 		//extra
-		movInfo.init();
+		heightMap.initImage(HEIGHT_MAP_PATH, 41.5, 1000, 1000);
+		normalMap.initImage(NORMAL_MAP_PATH, 41.5, 1000, 1000);
+
+		
+		setInitialPosition();
 	}
 
 	/**
@@ -225,6 +251,9 @@ class MyProject : public BaseProject {
 		
 		globalDSL.cleanup();
 		objectDSL.cleanup();
+
+		heightMap.cleanup();
+		normalMap.cleanup();
 	}
 	
 	/**
@@ -299,7 +328,7 @@ class MyProject : public BaseProject {
 
 		static float aspectRatio = ((float) swapChainExtent.width) / (float) swapChainExtent.height;
 		static float nearPlane = 0.1;
-		static float farPlane = 30;
+		static float farPlane = 100;
 
 
 		
@@ -349,6 +378,45 @@ class MyProject : public BaseProject {
 
 
 	/**
+	 * @brief Set the Initial Position of car and initialize all movement info parameters
+	 * 
+	 */
+	void setInitialPosition() {
+
+		movInfo.carPosition = glm::vec3(
+			980,
+			heightMap.getHeightValue(980,980),
+			980
+		);
+
+		movInfo.carDirection = glm::vec3(0,0,-1);   //initial direction
+
+		movInfo.cameraPosition = movInfo.carPosition + -2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
+		
+		movInfo.upVector = glm::vec3(0,1,0);
+
+		movInfo.acceleration = 0;
+		movInfo.velocity = 0;
+
+		glm::vec3 terrainNormal = normalMap.getNormalVector(movInfo.carPosition.x,movInfo.carPosition.z);
+		float angle = glm::dot(terrainNormal, glm::vec3(0,1,0));
+		movInfo.angX = 0;
+		movInfo.angY = glm::dot(terrainNormal, glm::vec3(0,1,0));
+		movInfo.angZ = 0;
+		movInfo.carRotation= glm::rotate(glm::mat4(1), glm::radians(movInfo.angZ), glm::vec3(0,0,1))*
+					 glm::rotate(glm::mat4(1), glm::radians(movInfo.angX), glm::vec3(1,0,0))*
+					 glm::rotate(glm::mat4(1), glm::radians(movInfo.angY), glm::vec3(0,1,0)); //initial rotation
+
+		movInfo.carRotation *= glm::rotate(glm::mat4(1), glm::radians(angle), terrainNormal);
+
+
+		movInfo.terrainTransform = glm::translate(glm::mat4(1), glm::vec3(0,0,0)) * 
+						   glm::rotate(glm::mat4(1), glm::radians(0.0f), glm::vec3(1,0,0)) *
+						   glm::scale(glm::mat4(1), glm::vec3(100,100,100));
+	}
+
+
+	/**
 	 * @brief function to update the movement info at each frame
 	 * 
 	 */
@@ -390,9 +458,6 @@ class MyProject : public BaseProject {
 		}
 
 
-		std::cout << movInfo.velocity << "\n";
-
-
 		//compute direction
 		if (movInfo.velocity > 0) {
 			if (A and !D) {
@@ -424,19 +489,21 @@ class MyProject : public BaseProject {
 
 		movInfo.carDirection = glm::normalize(movInfo.carDirection);
 
-		std::cout << movInfo.carDirection.x << " " << movInfo.carDirection.y << " " << movInfo.carDirection.z << " " << "\n";
-
 
 
 		//compute position
 		movInfo.carPosition += movInfo.velocity * deltaTime * movInfo.carDirection;
-
-		std::cout << movInfo.carPosition.x << " " << movInfo.carPosition.y << " " << movInfo.carPosition.z << " " << "\n";
+		movInfo.carPosition = glm::vec3(
+			movInfo.carPosition.x,
+			heightMap.getHeightValue(movInfo.carPosition.x, movInfo.carPosition.z) + 1.0,
+			movInfo.carPosition.z
+		);
 
 
 
 		//compute angX and angZ with terrainNormal
-		//TODO
+		//glm::vec3 terrainNormal = normalMap.getNormalVector(movInfo.carPosition.x,movInfo.carPosition.z);
+		//float angle = glm::dot(terrainNormal, glm::vec3(0,1,0));
 
 
 
@@ -444,6 +511,8 @@ class MyProject : public BaseProject {
 		movInfo.carRotation = glm::rotate(glm::mat4(1), glm::radians(movInfo.angZ), glm::vec3(0,0,1))*
 							  glm::rotate(glm::mat4(1), glm::radians(movInfo.angX), glm::vec3(1,0,0))*
 							  glm::rotate(glm::mat4(1), glm::radians(movInfo.angY), glm::vec3(0,1,0));
+		
+		//movInfo.carRotation *= glm::rotate(glm::mat4(1), glm::radians(angle), terrainNormal);
 
 
 
@@ -492,7 +561,14 @@ class MyProject : public BaseProject {
 			movInfo.cameraPosition = movInfo.carPosition + -2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
 		}
 
+
+		//std::cout << movInfo.velocity << "\n";
+		//std::cout << movInfo.carDirection.x << " " << movInfo.carDirection.y << " " << movInfo.carDirection.z << " " << "\n";
+		std::cout << movInfo.carPosition.x << " " << movInfo.carPosition.y << " " << movInfo.carPosition.z << " " << "\n";
+
+		//std::cout << terrainNormal.x << " " << terrainNormal.y << " " << terrainNormal.z << " " << "\n";
 	}
+
 };
 
 // This is the main: probably you do not need to touch this!
