@@ -1,16 +1,23 @@
 #include "VulkanApp.hpp"
 
-const std::string CAR_MODEL_PATH = "models/car m1v2.obj";
+const std::string CAR_MODEL_PATH = "models/car m1 v3.obj";
 const std::string CAR_TEXTURE_PATH = "textures/car m1 texture.png";
 
-const std::string TERRAIN_MODEL_PATH = "models/terrain3d.obj";
-const std::string TERRAIN_TEXTURE_PATH = "textures/myGroundTexture.png";
+const std::string TERRAIN_MODEL_PATH = "models/final 3d map.obj";
+const std::string TERRAIN_TEXTURE_PATH = "textures/terrain texture.png";
 
 const std::string VERTEX_SHADER_PATH = "shaders/vert.spv";
 const std::string FRAGMENT_SHADER_PATH = "shaders/frag.spv";
 
 const std::string HEIGHT_MAP_PATH = "maps/height map.png";
-const std::string NORMAL_MAP_PATH = "maps/final normal map.png";
+const std::string NORMAL_MAP_PATH = "maps/normal map.png";
+
+const int MAP_SCALE = 1000;
+const float MAP_HEIGHT = 0.35;
+const float CAR_SCALE = 0.4;
+
+const float CAMERA_DISTANCE = 3.0;
+const float CAMERA_HEIGHT = 1.0;
 
 
 // The uniform buffer objects used
@@ -59,20 +66,20 @@ struct ImageInfo {
 	glm::vec3 getNormalVector(float xCoord, float zCoord) {
 
 		float temp = xCoord + mapWidthX;
-		size_t x = std::ceil(temp * (2048.0f / 2000.0f));
+		size_t x = std::ceil(temp * ((float) imageWidth / (mapWidthX * 2)));
 
 		temp = zCoord + mapWidthZ;
-		size_t y = std::ceil(temp * (2048.0f / 2000.0f));
+		size_t y = std::ceil(temp * ((float) imageHeight / (mapWidthZ * 2)));
 
 		stbi_uc r = pixels[4 * (y * imageWidth + x) + 0];
 		stbi_uc g = pixels[4 * (y * imageWidth + x) + 1];
 		stbi_uc b = pixels[4 * (y * imageWidth + x) + 2];
 
 
-		glm::vec3 returnVector = glm::vec3(  //in vulkan: red = x, blue = y, green = -z
+		glm::vec3 returnVector = glm::vec3( 
 			((float) r / 255.0f) * 2 - 1.0f,
-			((float) b / 255.0f) * 2 - 1.0f,
-			((float) g / 255.0f) * 2 - 1.0f
+			((float) g / 255.0f) * 2 - 1.0f,
+			((float) b / 255.0f) * 2 - 1.0f
 		);
 
 		returnVector = glm::normalize(returnVector);
@@ -83,10 +90,10 @@ struct ImageInfo {
 	float getHeightValue(float xCoord, float zCoord) {
 
 		float temp = xCoord + mapWidthX;
-		size_t x = std::ceil(temp * (2048.0f / 2000.0f));
+		size_t x = std::ceil(temp * ((float) imageWidth / (mapWidthX * 2)));
 
 		temp = zCoord + mapWidthZ;
-		size_t y = std::ceil(temp * (2048.0f / 2000.0f));
+		size_t y = std::ceil(temp * ((float) imageHeight / (mapWidthZ * 2)));
 
 
 		stbi_uc h = pixels[4 * (y * imageWidth + x) + 0];
@@ -161,8 +168,8 @@ class MyProject : public BaseProject {
      */
 	void setWindowParameters() {
 		// window size, title and initial background
-		windowWidth = 800;
-		windowHeight = 600;
+		windowWidth = 1000;
+		windowHeight = 1000;
 		windowTitle = "Car simulator";
 		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
 		
@@ -225,8 +232,8 @@ class MyProject : public BaseProject {
 
 
 		//extra
-		heightMap.initImage(HEIGHT_MAP_PATH, 41.5, 1000, 1000);
-		normalMap.initImage(NORMAL_MAP_PATH, 41.5, 1000, 1000);
+		heightMap.initImage(HEIGHT_MAP_PATH, MAP_HEIGHT * (float) MAP_SCALE, MAP_SCALE, MAP_SCALE);
+		normalMap.initImage(NORMAL_MAP_PATH, MAP_HEIGHT * (float) MAP_SCALE, MAP_SCALE, MAP_SCALE);
 
 		
 		setInitialPosition();
@@ -327,7 +334,7 @@ class MyProject : public BaseProject {
 		lastTime = time;
 
 		static float aspectRatio = ((float) swapChainExtent.width) / (float) swapChainExtent.height;
-		static float nearPlane = 0.1;
+		static float nearPlane = 1;
 		static float farPlane = 100;
 
 
@@ -357,7 +364,8 @@ class MyProject : public BaseProject {
 
 
 		ubo.model = glm::translate(glm::mat4(1), movInfo.carPosition) * 
-					movInfo.carRotation;
+					movInfo.carRotation *
+					glm::scale(glm::mat4(1), glm::vec3(CAR_SCALE, CAR_SCALE, CAR_SCALE));
 
 		vkMapMemory(device, carDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo), 0, &data);
 		    memcpy(data, &ubo, sizeof(ubo));
@@ -384,14 +392,14 @@ class MyProject : public BaseProject {
 	void setInitialPosition() {
 
 		movInfo.carPosition = glm::vec3(
-			980,
-			heightMap.getHeightValue(980,980),
+			-980,
+			heightMap.getHeightValue(-980,980),
 			980
 		);
 
 		movInfo.carDirection = glm::vec3(0,0,-1);   //initial direction
 
-		movInfo.cameraPosition = movInfo.carPosition + -2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
+		movInfo.cameraPosition = movInfo.carPosition + -CAMERA_DISTANCE * movInfo.carDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		
 		movInfo.upVector = glm::vec3(0,1,0);
 
@@ -399,20 +407,28 @@ class MyProject : public BaseProject {
 		movInfo.velocity = 0;
 
 		glm::vec3 terrainNormal = normalMap.getNormalVector(movInfo.carPosition.x,movInfo.carPosition.z);
-		float angle = glm::dot(terrainNormal, glm::vec3(0,1,0));
-		movInfo.angX = 0;
-		movInfo.angY = glm::dot(terrainNormal, glm::vec3(0,1,0));
-		movInfo.angZ = 0;
-		movInfo.carRotation= glm::rotate(glm::mat4(1), glm::radians(movInfo.angZ), glm::vec3(0,0,1))*
-					 glm::rotate(glm::mat4(1), glm::radians(movInfo.angX), glm::vec3(1,0,0))*
+		movInfo.angX = glm::acos(glm::dot(terrainNormal, glm::normalize(
+			glm::vec3(
+				terrainNormal.x,
+				terrainNormal.y,
+				0
+				))));
+		movInfo.angY = 0;
+		movInfo.angZ = glm::acos(glm::dot(terrainNormal, glm::normalize(
+			glm::vec3(
+				0,
+				terrainNormal.y,
+				terrainNormal.z
+				))));
+		movInfo.carRotation= glm::rotate(glm::mat4(1), movInfo.angZ, glm::vec3(0,0,1)) *
+					 glm::rotate(glm::mat4(1), movInfo.angX, glm::vec3(1,0,0)) *
 					 glm::rotate(glm::mat4(1), glm::radians(movInfo.angY), glm::vec3(0,1,0)); //initial rotation
 
-		movInfo.carRotation *= glm::rotate(glm::mat4(1), glm::radians(angle), terrainNormal);
-
+		
 
 		movInfo.terrainTransform = glm::translate(glm::mat4(1), glm::vec3(0,0,0)) * 
-						   glm::rotate(glm::mat4(1), glm::radians(0.0f), glm::vec3(1,0,0)) *
-						   glm::scale(glm::mat4(1), glm::vec3(100,100,100));
+						   glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1,0,0)) *
+						   glm::scale(glm::mat4(1), glm::vec3(MAP_SCALE, MAP_SCALE, MAP_SCALE));
 	}
 
 
@@ -493,26 +509,38 @@ class MyProject : public BaseProject {
 
 		//compute position
 		movInfo.carPosition += movInfo.velocity * deltaTime * movInfo.carDirection;
+
 		movInfo.carPosition = glm::vec3(
 			movInfo.carPosition.x,
-			heightMap.getHeightValue(movInfo.carPosition.x, movInfo.carPosition.z) + 1.0,
+			heightMap.getHeightValue(movInfo.carPosition.x, movInfo.carPosition.z),
 			movInfo.carPosition.z
 		);
 
 
 
 		//compute angX and angZ with terrainNormal
-		//glm::vec3 terrainNormal = normalMap.getNormalVector(movInfo.carPosition.x,movInfo.carPosition.z);
-		//float angle = glm::dot(terrainNormal, glm::vec3(0,1,0));
+		glm::vec3 terrainNormal = normalMap.getNormalVector(movInfo.carPosition.x,movInfo.carPosition.z);
+		movInfo.angX = glm::acos(glm::dot(terrainNormal, glm::normalize(
+			glm::vec3(
+				terrainNormal.x,
+				terrainNormal.y,
+				0
+				))));
+		movInfo.angZ = glm::acos(glm::dot(terrainNormal, glm::normalize(
+			glm::vec3(
+				0,
+				terrainNormal.y,
+				terrainNormal.z
+				))));
 
 
 
 		//update rotation
-		movInfo.carRotation = glm::rotate(glm::mat4(1), glm::radians(movInfo.angZ), glm::vec3(0,0,1))*
-							  glm::rotate(glm::mat4(1), glm::radians(movInfo.angX), glm::vec3(1,0,0))*
+		movInfo.carRotation = glm::rotate(glm::mat4(1), movInfo.angZ, glm::vec3(0,0,1))*
+							  glm::rotate(glm::mat4(1), movInfo.angX, glm::vec3(1,0,0))*
 							  glm::rotate(glm::mat4(1), glm::radians(movInfo.angY), glm::vec3(0,1,0));
 		
-		//movInfo.carRotation *= glm::rotate(glm::mat4(1), glm::radians(angle), terrainNormal);
+		
 
 
 
@@ -524,10 +552,10 @@ class MyProject : public BaseProject {
 
 		//update camera position
 		if (upArrow) {
-			movInfo.cameraPosition = movInfo.carPosition + 2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
+			movInfo.cameraPosition = movInfo.carPosition + CAMERA_DISTANCE * movInfo.carDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
 		else if (downArrow) {
-			movInfo.cameraPosition = movInfo.carPosition + -2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
+			movInfo.cameraPosition = movInfo.carPosition + -CAMERA_DISTANCE * movInfo.carDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
 		else if (leftArrow) {
 			tempDirection = glm::vec4(movInfo.carDirection.x,
@@ -541,7 +569,7 @@ class MyProject : public BaseProject {
 														 tempDirection.z);
 			perpendicularDirection = glm::normalize(perpendicularDirection);
 
-			movInfo.cameraPosition = movInfo.carPosition + 2.0f * perpendicularDirection + glm::vec3(0,1.5,0);
+			movInfo.cameraPosition = movInfo.carPosition + CAMERA_DISTANCE * perpendicularDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
 		else if (rightArrow) {
 			tempDirection = glm::vec4(movInfo.carDirection.x,
@@ -555,18 +583,19 @@ class MyProject : public BaseProject {
 														 tempDirection.z);
 			perpendicularDirection = glm::normalize(perpendicularDirection);
 
-			movInfo.cameraPosition = movInfo.carPosition + -2.0f * perpendicularDirection + glm::vec3(0,1.5,0);
+			movInfo.cameraPosition = movInfo.carPosition + -CAMERA_DISTANCE * perpendicularDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
 		else {
-			movInfo.cameraPosition = movInfo.carPosition + -2.0f * movInfo.carDirection + glm::vec3(0,1.5,0);
+			movInfo.cameraPosition = movInfo.carPosition + -CAMERA_DISTANCE * movInfo.carDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
 
 
 		//std::cout << movInfo.velocity << "\n";
 		//std::cout << movInfo.carDirection.x << " " << movInfo.carDirection.y << " " << movInfo.carDirection.z << " " << "\n";
-		std::cout << movInfo.carPosition.x << " " << movInfo.carPosition.y << " " << movInfo.carPosition.z << " " << "\n";
+		//std::cout << movInfo.carPosition.x << " " << movInfo.carPosition.y << " " << movInfo.carPosition.z << " " << "\n";
 
 		//std::cout << terrainNormal.x << " " << terrainNormal.y << " " << terrainNormal.z << " " << "\n";
+		//std::cout << movInfo.angX << " " << movInfo.angY << " " << movInfo.angZ << " " << "\n";
 	}
 
 };
