@@ -16,8 +16,8 @@ const int MAP_SCALE = 1000;
 const float MAP_HEIGHT = 0.35;
 const float CAR_SCALE = 0.4;
 
-const float CAMERA_DISTANCE = 3.0;
-const float CAMERA_HEIGHT = 1.0;
+const float CAMERA_DISTANCE = 5.0;
+const float CAMERA_HEIGHT = 1.5;
 
 
 // The uniform buffer objects used
@@ -335,7 +335,7 @@ class MyProject : public BaseProject {
 
 		static float aspectRatio = ((float) swapChainExtent.width) / (float) swapChainExtent.height;
 		static float nearPlane = 1;
-		static float farPlane = 100;
+		static float farPlane = 400;
 
 
 		
@@ -526,12 +526,18 @@ class MyProject : public BaseProject {
 				terrainNormal.y,
 				0
 				))));
+		if (terrainNormal.z < 0) {
+			movInfo.angX *= -1;
+		}
 		movInfo.angZ = glm::acos(glm::dot(terrainNormal, glm::normalize(
 			glm::vec3(
 				0,
 				terrainNormal.y,
 				terrainNormal.z
 				))));
+		if (terrainNormal.x > 0) {
+			movInfo.angZ *= -1;
+		}
 
 
 
@@ -594,8 +600,8 @@ class MyProject : public BaseProject {
 		//std::cout << movInfo.carDirection.x << " " << movInfo.carDirection.y << " " << movInfo.carDirection.z << " " << "\n";
 		//std::cout << movInfo.carPosition.x << " " << movInfo.carPosition.y << " " << movInfo.carPosition.z << " " << "\n";
 
-		//std::cout << terrainNormal.x << " " << terrainNormal.y << " " << terrainNormal.z << " " << "\n";
-		//std::cout << movInfo.angX << " " << movInfo.angY << " " << movInfo.angZ << " " << "\n";
+		std::cout << "normal: " << terrainNormal.x << " " << terrainNormal.y << " " << terrainNormal.z << " " << "\n";
+		std::cout << "angs: " << movInfo.angX << " " << movInfo.angY << " " << movInfo.angZ << " " << "\n";
 	}
 
 };
