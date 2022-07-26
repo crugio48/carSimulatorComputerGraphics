@@ -35,6 +35,9 @@ const float CAMERA_HEIGHT = 3.0;
 struct GlobalUniformBufferObject {
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
+	alignas(16) glm::vec3 rightFrontLightPos;
+	alignas(16) glm::vec3 leftFrontLightPos;
+	alignas(16) glm::vec3 carLightDir;
 };
 
 struct UniformBufferObject {
@@ -140,6 +143,10 @@ struct MovementInfo {
 
 
 	glm::mat4 terrainTransform; //to keep const value of terrain placement
+
+
+	glm::vec3 rightFrontCarLightPos;
+	glm::vec3 leftFrontCarLightPos;
 
 };
 
@@ -371,10 +378,10 @@ class MyProject : public BaseProject {
 		
 		updateMovementInfo(deltaT);
 
-					
+
 		GlobalUniformBufferObject gubo{};
 		UniformBufferObject ubo{};
-		void* data;
+		void* data;	
 
 		gubo.view = glm::lookAt(movInfo.cameraPosition, movInfo.carPosition, movInfo.upVector);
 
@@ -383,6 +390,9 @@ class MyProject : public BaseProject {
 									nearPlane,
 									farPlane);
 		gubo.proj[1][1] *= -1;
+		gubo.rightFrontLightPos = movInfo.rightFrontCarLightPos;
+		gubo.leftFrontLightPos = movInfo.leftFrontCarLightPos;
+		gubo.carLightDir = movInfo.carDirection;
 
 		// Here is where you actually update your uniforms
 		vkMapMemory(device, globalDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(gubo), 0, &data);
@@ -465,6 +475,10 @@ class MyProject : public BaseProject {
 		movInfo.terrainTransform = glm::translate(glm::mat4(1), glm::vec3(0,0,0)) * 
 						   glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1,0,0)) *
 						   glm::scale(glm::mat4(1), glm::vec3(MAP_SCALE, MAP_SCALE, MAP_SCALE));
+
+
+		movInfo.rightFrontCarLightPos = movInfo.carPosition;
+		movInfo.leftFrontCarLightPos = movInfo.carPosition;
 	}
 
 
@@ -617,6 +631,17 @@ class MyProject : public BaseProject {
 		int rightArrow = glfwGetKey(window, GLFW_KEY_RIGHT);  // true(1) if button right arrow pressed
 
 		//update camera position
+		tempDirection = glm::vec4(movInfo.carDirection.x,
+								  movInfo.carDirection.y,
+								  movInfo.carDirection.z,
+								  0);
+		tempDirection = glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(0,1,0)) *
+						tempDirection;
+		glm::vec3 perpendicularDirection = glm::vec3(tempDirection.x,
+													 tempDirection.y,
+													 tempDirection.z);
+		perpendicularDirection = glm::normalize(perpendicularDirection);
+
 		if (upArrow) {
 			movInfo.cameraPosition = movInfo.carPosition + CAMERA_DISTANCE * movInfo.carDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
@@ -624,36 +649,31 @@ class MyProject : public BaseProject {
 			movInfo.cameraPosition = movInfo.carPosition + -CAMERA_DISTANCE * movInfo.carDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
 		else if (leftArrow) {
-			tempDirection = glm::vec4(movInfo.carDirection.x,
-									  movInfo.carDirection.y,
-									  movInfo.carDirection.z,
-									  0);
-			tempDirection = glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(0,1,0))*
-							tempDirection;
-			glm::vec3 perpendicularDirection = glm::vec3(tempDirection.x,
-														 tempDirection.y,
-														 tempDirection.z);
-			perpendicularDirection = glm::normalize(perpendicularDirection);
-
 			movInfo.cameraPosition = movInfo.carPosition + CAMERA_DISTANCE * perpendicularDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
 		else if (rightArrow) {
-			tempDirection = glm::vec4(movInfo.carDirection.x,
-									  movInfo.carDirection.y,
-									  movInfo.carDirection.z,
-									  0);
-			tempDirection = glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(0,1,0))*
-							tempDirection;
-			glm::vec3 perpendicularDirection = glm::vec3(tempDirection.x,
-														 tempDirection.y,
-														 tempDirection.z);
-			perpendicularDirection = glm::normalize(perpendicularDirection);
-
 			movInfo.cameraPosition = movInfo.carPosition + -CAMERA_DISTANCE * perpendicularDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
 		else {
 			movInfo.cameraPosition = movInfo.carPosition + -CAMERA_DISTANCE * movInfo.carDirection + glm::vec3(0,CAMERA_HEIGHT,0);
 		}
+
+
+
+		//compute car light position
+		static float heightDisplacement = 3.0;
+		static float frontDisplacement = 0.5;
+		static float lateralDisplacement = 1.5;
+		movInfo.rightFrontCarLightPos = movInfo.carPosition +
+										glm::vec3(0, CAR_SCALE * heightDisplacement, 0) + 
+										movInfo.carDirection * CAR_SCALE * frontDisplacement + 
+										-perpendicularDirection * CAR_SCALE * lateralDisplacement;
+
+		movInfo.leftFrontCarLightPos = movInfo.carPosition + 
+									   glm::vec3(0, CAR_SCALE * heightDisplacement, 0) + 
+									   movInfo.carDirection * CAR_SCALE * frontDisplacement + 
+									   perpendicularDirection * CAR_SCALE * lateralDisplacement;
+
 
 
 		//std::cout << movInfo.velocity << "\n";
@@ -662,6 +682,9 @@ class MyProject : public BaseProject {
 
 		//std::cout << "normal: " << terrainNormal.x << " " << terrainNormal.y << " " << terrainNormal.z << " " << "\n";
 		//std::cout << "angs: " << movInfo.angX << " " << movInfo.angY << " " << movInfo.angZ << " " << "\n";
+		
+		//std::cout << "rightFrontLight: " << movInfo.rightFrontCarLightPos.x << " " << movInfo.rightFrontCarLightPos.y << " " << movInfo.rightFrontCarLightPos.z << " " << "\n";
+		//std::cout << "leftFrontLight: " << movInfo.leftFrontCarLightPos.x << " " << movInfo.leftFrontCarLightPos.y << " " << movInfo.leftFrontCarLightPos.z << " " << "\n";
 	}
 
 };
