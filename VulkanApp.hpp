@@ -34,8 +34,6 @@
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 
-//#define NDEBUG     //comment out if debug needed
-
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
 #else

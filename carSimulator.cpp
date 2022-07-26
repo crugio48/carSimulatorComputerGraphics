@@ -1,4 +1,7 @@
+//#define NDEBUG     //comment out if debug needed
 #include "VulkanApp.hpp"
+
+#define DAY
 
 const std::string CAR_MODEL_PATH = "models/car m1 v3.obj";
 const std::string CAR_TEXTURE_PATH = "textures/car m1 texture.png";
@@ -7,7 +10,12 @@ const std::string TERRAIN_MODEL_PATH = "models/final 3d map.obj";
 const std::string TERRAIN_TEXTURE_PATH = "textures/terrain texture.png";
 
 const std::string VERTEX_SHADER_PATH = "shaders/vert.spv";
-const std::string FRAGMENT_SHADER_PATH = "shaders/frag.spv";
+#ifdef DAY
+const std::string CAR_FRAGMENT_SHADER_PATH = "shaders/car_day_frag.spv";
+const std::string TERRAIN_FRAGMENT_SHADER_PATH = "shaders/terrain_day_frag.spv";
+#else
+//todo night shaders
+#endif
 
 const std::string HEIGHT_MAP_PATH = "maps/height map.png";
 const std::string NORMAL_MAP_PATH = "maps/normal map.png";
@@ -16,8 +24,11 @@ const int MAP_SCALE = 1000;
 const float MAP_HEIGHT = 0.35;
 const float CAR_SCALE = 0.4;
 
+const int STARTING_X = -980;
+const int STARTING_Z = 980;
+
 const float CAMERA_DISTANCE = 5.0;
-const float CAMERA_HEIGHT = 1.5;
+const float CAMERA_HEIGHT = 3.0;
 
 
 // The uniform buffer objects used
@@ -142,7 +153,8 @@ class MyProject : public BaseProject {
 	DescriptorSetLayout objectDSL;
 
 	// Pipelines [Shader couples]
-	Pipeline pipeline;
+	Pipeline carPipeline;
+	Pipeline terrainPipeline;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
 	DescriptorSet globalDescriptorSet;
@@ -202,7 +214,9 @@ class MyProject : public BaseProject {
 		// Pipelines [Shader couples]
 		// The last array, is a vector of pointer to the layouts of the sets that will
 		// be used in this pipeline. The first element will be set 0, and so on..
-		pipeline.init(this, VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH, {&globalDSL, &objectDSL});
+		carPipeline.init(this, VERTEX_SHADER_PATH, CAR_FRAGMENT_SHADER_PATH, {&globalDSL, &objectDSL});
+		terrainPipeline.init(this, VERTEX_SHADER_PATH, TERRAIN_FRAGMENT_SHADER_PATH, {&globalDSL, &objectDSL});
+
 
 		// Models, textures and Descriptors (values assigned to the uniforms)
 		carModel.init(this, CAR_MODEL_PATH);
@@ -254,7 +268,8 @@ class MyProject : public BaseProject {
 
 		globalDescriptorSet.cleanup();
 
-		pipeline.cleanup();
+		carPipeline.cleanup();
+		terrainPipeline.cleanup();
 		
 		globalDSL.cleanup();
 		objectDSL.cleanup();
@@ -270,15 +285,16 @@ class MyProject : public BaseProject {
 	 * @param currentImage 
 	 */
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
-				
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-				pipeline.graphicsPipeline);
+		
+		//TERRAIN PIPELINE	
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+					carPipeline.graphicsPipeline);
 
 		///////////////////////////////                    GLOBAL
 
 		vkCmdBindDescriptorSets(commandBuffer,
 						VK_PIPELINE_BIND_POINT_GRAPHICS,
-						pipeline.pipelineLayout, 0, 1, &globalDescriptorSet.descriptorSets[currentImage],
+						carPipeline.pipelineLayout, 0, 1, &globalDescriptorSet.descriptorSets[currentImage],
 						0, nullptr);
 
 				
@@ -294,12 +310,26 @@ class MyProject : public BaseProject {
 		// property .descriptorSets of a descriptor set contains its elements.
 		vkCmdBindDescriptorSets(commandBuffer,
 						        VK_PIPELINE_BIND_POINT_GRAPHICS,
-						        pipeline.pipelineLayout, 1, 1, &carDescriptorSet.descriptorSets[currentImage],
+						        carPipeline.pipelineLayout, 1, 1, &carDescriptorSet.descriptorSets[currentImage],
 						        0, nullptr);
 
 		// property .indices.size() of models, contains the number of triangles * 3 of the mesh.
 		vkCmdDrawIndexed(commandBuffer,
 					     static_cast<uint32_t>(carModel.indices.size()), 1, 0, 0, 0);
+
+
+
+
+		//TERRAIN PIPELINE
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
+					terrainPipeline.graphicsPipeline);
+
+		///////////////////////////////                    GLOBAL
+
+		vkCmdBindDescriptorSets(commandBuffer,
+						VK_PIPELINE_BIND_POINT_GRAPHICS,
+						terrainPipeline.pipelineLayout, 0, 1, &globalDescriptorSet.descriptorSets[currentImage],
+						0, nullptr);
 
 		///////////////////////////////                   TERRAIN
 
@@ -311,7 +341,7 @@ class MyProject : public BaseProject {
 
 		vkCmdBindDescriptorSets(commandBuffer,
 								VK_PIPELINE_BIND_POINT_GRAPHICS,
-						        pipeline.pipelineLayout, 1, 1, &terrainDescriptorSet.descriptorSets[currentImage],
+						        terrainPipeline.pipelineLayout, 1, 1, &terrainDescriptorSet.descriptorSets[currentImage],
 						        0, nullptr);
 
 		vkCmdDrawIndexed(commandBuffer,
@@ -392,9 +422,9 @@ class MyProject : public BaseProject {
 	void setInitialPosition() {
 
 		movInfo.carPosition = glm::vec3(
-			-980,
-			heightMap.getHeightValue(-980,980),
-			980
+			STARTING_X,
+			heightMap.getHeightValue(STARTING_X,STARTING_Z),
+			STARTING_Z
 		);
 
 		movInfo.carDirection = glm::vec3(0,0,-1);   //initial direction
@@ -413,6 +443,9 @@ class MyProject : public BaseProject {
 				terrainNormal.y,
 				0
 				))));
+		if (terrainNormal.z < 0) {
+			movInfo.angX *= -1;
+		}
 		movInfo.angY = 0;
 		movInfo.angZ = glm::acos(glm::dot(terrainNormal, glm::normalize(
 			glm::vec3(
@@ -420,6 +453,9 @@ class MyProject : public BaseProject {
 				terrainNormal.y,
 				terrainNormal.z
 				))));
+		if (terrainNormal.x > 0) {
+			movInfo.angZ *= -1;
+		}
 		movInfo.carRotation= glm::rotate(glm::mat4(1), movInfo.angZ, glm::vec3(0,0,1)) *
 					 glm::rotate(glm::mat4(1), movInfo.angX, glm::vec3(1,0,0)) *
 					 glm::rotate(glm::mat4(1), glm::radians(movInfo.angY), glm::vec3(0,1,0)); //initial rotation
@@ -449,10 +485,20 @@ class MyProject : public BaseProject {
 
 		//compute acceleration
 		if (W and !S) {
-			movInfo.acceleration = +10;
+			if (movInfo.velocity > 0) {
+				movInfo.acceleration = +10;  //acceleration
+			}
+			else {
+				movInfo.acceleration = +50;   //braking
+			}
 		}
 		else if (S and !W) {
-			movInfo.acceleration = -10;
+			if (movInfo.velocity < 0) {
+				movInfo.acceleration = -10;   //acceleration
+			}
+			else {
+				movInfo.acceleration = -50;   //braking
+			}
 		}
 		else {
 			movInfo.acceleration = 0;
@@ -509,6 +555,20 @@ class MyProject : public BaseProject {
 
 		//compute position
 		movInfo.carPosition += movInfo.velocity * deltaTime * movInfo.carDirection;
+
+		if (movInfo.carPosition.x < - MAP_SCALE) {
+			movInfo.carPosition.x = - MAP_SCALE;
+		}
+		if (movInfo.carPosition.x > MAP_SCALE) {
+			movInfo.carPosition.x = MAP_SCALE;
+		}
+		if (movInfo.carPosition.z < - MAP_SCALE) {
+			movInfo.carPosition.z = - MAP_SCALE;
+		}
+		if (movInfo.carPosition.z > MAP_SCALE) {
+			movInfo.carPosition.z = MAP_SCALE;
+		}
+
 
 		movInfo.carPosition = glm::vec3(
 			movInfo.carPosition.x,
@@ -600,8 +660,8 @@ class MyProject : public BaseProject {
 		//std::cout << movInfo.carDirection.x << " " << movInfo.carDirection.y << " " << movInfo.carDirection.z << " " << "\n";
 		//std::cout << movInfo.carPosition.x << " " << movInfo.carPosition.y << " " << movInfo.carPosition.z << " " << "\n";
 
-		std::cout << "normal: " << terrainNormal.x << " " << terrainNormal.y << " " << terrainNormal.z << " " << "\n";
-		std::cout << "angs: " << movInfo.angX << " " << movInfo.angY << " " << movInfo.angZ << " " << "\n";
+		//std::cout << "normal: " << terrainNormal.x << " " << terrainNormal.y << " " << terrainNormal.z << " " << "\n";
+		//std::cout << "angs: " << movInfo.angX << " " << movInfo.angY << " " << movInfo.angZ << " " << "\n";
 	}
 
 };
