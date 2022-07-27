@@ -6,9 +6,9 @@ layout(set = 0, binding = 0) uniform globalUniformBufferObject {
 	vec3 rightFrontLightPos;
 	vec3 leftFrontLightPos;
 	vec3 carLightDir;
-	vec3 rightRearLightPos;
+    vec3 rightRearLightPos;
 	vec3 leftRearLightPos;
-	vec3 backLightsColor;
+    vec3 backLightsColor;
 } gubo;
 
 layout(set=1, binding = 1) uniform sampler2D texSampler;
@@ -105,13 +105,13 @@ vec3 spot_light_color(vec3 P, vec3 LP, vec3 L, vec3 C, float cIn, float cOut, fl
 void main() {
     //make sure this set of variables is the same for both day fragment shaders
     vec3 directLightDirection = normalize(vec3(0.2, 1.0, 0.2)); 
-	vec3 directLightColor = vec3(1.0, 1.0, 1.0);
-	vec3 carLightColor = vec3(0.1, 0.1, 0.1);
+	vec3 directLightColor = vec3(0.1, 0.1, 0.1);
+	vec3 carLightColor = vec3(1.0, 1.0, 1.0);
 	float decayFactorSpotLight = 1.0;
 	float cosineInnerSpotLight = cos(3.14 / 5);
 	float cosineOuterSpotLight = cos(3.14 / 4);
 	float targetDistanceSpotLight = 70;      //up to distance of max intensity
-    vec3 ambientLight = vec3(0.3,0.3, 0.3);
+    vec3 ambientLight = vec3(0.01,0.01, 0.01);
 
 
 	vec3  diffColor = texture(texSampler, fragTexCoord).rgb;
@@ -152,13 +152,13 @@ void main() {
 							  decayFactorSpotLight) *
 			 diffuse;
 
-	diffuse = Oren_Nayar_Diffuse_BRDF(spot_light_dir(fragPos, gubo.rightRearLightPos), 
+    diffuse = Oren_Nayar_Diffuse_BRDF(spot_light_dir(fragPos, gubo.rightRearLightPos), 
 									  normal, viewDir, diffColor, roughness);
 
 	color += spot_light_color(fragPos,
 							  gubo.rightRearLightPos,
 							  gubo.carLightDir,
-							  gubo.backLightsColor * 0.5,
+							  gubo.backLightsColor,
 							  cosineInnerSpotLight,
 							  cosineOuterSpotLight,
 							  targetDistanceSpotLight * 0.1,
@@ -171,13 +171,12 @@ void main() {
 	color += spot_light_color(fragPos,
 							  gubo.leftRearLightPos,
 							  gubo.carLightDir,
-							  gubo.backLightsColor * 0.5,
+							  gubo.backLightsColor,
 							  cosineInnerSpotLight,
 							  cosineOuterSpotLight,
 							  targetDistanceSpotLight * 0.1,
 							  decayFactorSpotLight + 1) *
 			 diffuse;
-
 
 	// ambient lighting
 	vec3 ambient  = ambientLight * diffColor;

@@ -7,7 +7,9 @@ HEADERS_INCLUDE_PATH = ./headers
 carSim_exec: carSimulator.cpp
 	glslc shaders/shader.vert -o shaders/vert.spv
 	glslc shaders/carDay.frag -o shaders/car_day_frag.spv
+	glslc shaders/carNight.frag -o shaders/car_night_frag.spv
 	glslc shaders/terrainDay.frag -o shaders/terrain_day_frag.spv
+	glslc shaders/terrainNight.frag -o shaders/terrain_night_frag.spv
 	g++ $(CFLAGS) -o carSim_exec carSimulator.cpp $(LDFLAGS)
 	
 	

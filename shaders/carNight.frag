@@ -47,12 +47,12 @@ vec3 Phong_Specular_BRDF(vec3 L, vec3 N, vec3 V, vec3 C, float gamma)  {
 void main() {
 	//make sure direct light dir and color and ambient light is the same for both day fragment shaders
     vec3 directLightDirection = normalize(vec3(0.2, 1.0, 0.2)); 
-	vec3 directLightColor = vec3(1.0, 1.0, 1.0);
-	vec3 ambientLight = vec3(0.3,0.3, 0.3);
+	vec3 directLightColor = vec3(0.1, 0.1, 0.1);
+	vec3 ambientLight = vec3(0.01,0.01, 0.01);
 
 
 	vec3  diffColor = texture(texSampler, fragTexCoord).rgb;
-	vec3  specColor = vec3(1.0, 1.0, 1.0);
+	vec3  specColor = vec3(0.01, 0.01, 0.01);
 	float specPower = 200.0;
 	
 	vec3 normal = normalize(fragNorm);

@@ -6,6 +6,9 @@ layout(set = 0, binding = 0) uniform globalUniformBufferObject {
 	vec3 rightFrontLightPos;
 	vec3 leftFrontLightPos;
 	vec3 carLightDir;
+	vec3 rightRearLightPos;
+	vec3 leftRearLightPos;
+	vec3 backLightsColor;
 } gubo;
 
 layout(set = 1, binding = 0) uniform UniformBufferObject {

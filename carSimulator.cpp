@@ -1,7 +1,7 @@
 //#define NDEBUG     //comment out if debug needed
 #include "VulkanApp.hpp"
 
-#define DAY
+#define DAY      //comment out to get night mode
 
 const std::string CAR_MODEL_PATH = "models/car m1 v3.obj";
 const std::string CAR_TEXTURE_PATH = "textures/car m1 texture.png";
@@ -13,8 +13,11 @@ const std::string VERTEX_SHADER_PATH = "shaders/vert.spv";
 #ifdef DAY
 const std::string CAR_FRAGMENT_SHADER_PATH = "shaders/car_day_frag.spv";
 const std::string TERRAIN_FRAGMENT_SHADER_PATH = "shaders/terrain_day_frag.spv";
+VkClearColorValue backgroundColor = {0.529f, 0.807f, 0.901f, 1.0f};
 #else
-//todo night shaders
+const std::string CAR_FRAGMENT_SHADER_PATH = "shaders/car_night_frag.spv";
+const std::string TERRAIN_FRAGMENT_SHADER_PATH = "shaders/terrain_night_frag.spv";
+VkClearColorValue backgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
 #endif
 
 const std::string HEIGHT_MAP_PATH = "maps/height map.png";
@@ -38,6 +41,9 @@ struct GlobalUniformBufferObject {
 	alignas(16) glm::vec3 rightFrontLightPos;
 	alignas(16) glm::vec3 leftFrontLightPos;
 	alignas(16) glm::vec3 carLightDir;
+	alignas(16) glm::vec3 rightRearLightPos;
+	alignas(16) glm::vec3 leftRearLightPos;
+	alignas(16) glm::vec3 backLightsColor;
 };
 
 struct UniformBufferObject {
@@ -147,6 +153,9 @@ struct MovementInfo {
 
 	glm::vec3 rightFrontCarLightPos;
 	glm::vec3 leftFrontCarLightPos;
+	glm::vec3 rightRearCarLightPos;
+	glm::vec3 leftRearCarLightPos;
+	glm::vec3 backLightsColorForBraking;
 
 };
 
@@ -187,10 +196,10 @@ class MyProject : public BaseProject {
      */
 	void setWindowParameters() {
 		// window size, title and initial background
-		windowWidth = 1000;
-		windowHeight = 1000;
+		windowWidth = 1600;
+		windowHeight = 1200;
 		windowTitle = "Car simulator";
-		initialBackgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
+		initialBackgroundColor = backgroundColor;
 		
 		// Descriptor pool sizes
 		uniformBlocksInPool = 3;        //how many descriptor sets??
@@ -372,7 +381,7 @@ class MyProject : public BaseProject {
 
 		static float aspectRatio = ((float) swapChainExtent.width) / (float) swapChainExtent.height;
 		static float nearPlane = 1;
-		static float farPlane = 400;
+		static float farPlane = 600;
 
 
 		
@@ -393,6 +402,9 @@ class MyProject : public BaseProject {
 		gubo.rightFrontLightPos = movInfo.rightFrontCarLightPos;
 		gubo.leftFrontLightPos = movInfo.leftFrontCarLightPos;
 		gubo.carLightDir = movInfo.carDirection;
+		gubo.rightRearLightPos = movInfo.rightRearCarLightPos;
+		gubo.leftRearLightPos = movInfo.leftRearCarLightPos;
+		gubo.backLightsColor = movInfo.backLightsColorForBraking;
 
 		// Here is where you actually update your uniforms
 		vkMapMemory(device, globalDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(gubo), 0, &data);
@@ -479,6 +491,9 @@ class MyProject : public BaseProject {
 
 		movInfo.rightFrontCarLightPos = movInfo.carPosition;
 		movInfo.leftFrontCarLightPos = movInfo.carPosition;
+		movInfo.rightRearCarLightPos = movInfo.carPosition;
+		movInfo.leftRearCarLightPos = movInfo.carPosition;
+		movInfo.backLightsColorForBraking = glm::vec3(0.0, 0.0, 0.0);
 	}
 
 
@@ -497,7 +512,9 @@ class MyProject : public BaseProject {
 		int S = glfwGetKey(window, GLFW_KEY_S);  // true(1) if button S pressed
 
 
-		//compute acceleration
+
+		//compute acceleration and back lights color
+		movInfo.backLightsColorForBraking = glm::vec3(0.0, 0.0, 0.0);
 		if (W and !S) {
 			if (movInfo.velocity > 0) {
 				movInfo.acceleration = +10;  //acceleration
@@ -512,6 +529,7 @@ class MyProject : public BaseProject {
 			}
 			else {
 				movInfo.acceleration = -50;   //braking
+				movInfo.backLightsColorForBraking = glm::vec3(0.5, 0.0, 0.0);
 			}
 		}
 		else {
@@ -674,6 +692,15 @@ class MyProject : public BaseProject {
 									   movInfo.carDirection * CAR_SCALE * frontDisplacement + 
 									   perpendicularDirection * CAR_SCALE * lateralDisplacement;
 
+		movInfo.rightRearCarLightPos = movInfo.carPosition +
+									   glm::vec3(0, CAR_SCALE * heightDisplacement, 0) + 
+									   -movInfo.carDirection * CAR_SCALE * frontDisplacement + 
+									   -perpendicularDirection * CAR_SCALE * lateralDisplacement;
+
+		movInfo.leftRearCarLightPos = movInfo.carPosition + 
+									  glm::vec3(0, CAR_SCALE * heightDisplacement, 0) + 
+									  -movInfo.carDirection * CAR_SCALE * frontDisplacement + 
+									  perpendicularDirection * CAR_SCALE * lateralDisplacement;
 
 
 		//std::cout << movInfo.velocity << "\n";
