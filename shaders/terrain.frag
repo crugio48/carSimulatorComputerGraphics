@@ -1,8 +1,13 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform globalUniformBufferObject {
-	mat4 view;
-	mat4 proj;
+layout(set = 0, binding = 0) uniform NightDayUniformBufferObject {
+	vec3 directLightValue;
+	vec3 carLightValue;
+	vec3 ambientLightValue;
+	float backLightsMultiplicationTerm;
+} ndubo;
+
+layout(set = 1, binding = 0) uniform globalUniformBufferObject {
 	vec3 rightFrontLightPos;
 	vec3 leftFrontLightPos;
 	vec3 carLightDir;
@@ -11,7 +16,7 @@ layout(set = 0, binding = 0) uniform globalUniformBufferObject {
 	vec3 backLightsColor;
 } gubo;
 
-layout(set=1, binding = 1) uniform sampler2D texSampler;
+layout(set=2, binding = 1) uniform sampler2D texSampler;
 
 layout(location = 0) in vec3 fragViewDir;
 layout(location = 1) in vec3 fragNorm;
@@ -105,13 +110,13 @@ vec3 spot_light_color(vec3 P, vec3 LP, vec3 L, vec3 C, float cIn, float cOut, fl
 void main() {
     //make sure this set of variables is the same for both day fragment shaders
     vec3 directLightDirection = normalize(vec3(0.2, 1.0, 0.2)); 
-	vec3 directLightColor = vec3(1.0, 1.0, 1.0);
-	vec3 carLightColor = vec3(0.1, 0.1, 0.1);
+	vec3 directLightColor = ndubo.directLightValue;
+	vec3 carLightColor = ndubo.carLightValue;
 	float decayFactorSpotLight = 1.0;
 	float cosineInnerSpotLight = cos(3.14 / 5);
 	float cosineOuterSpotLight = cos(3.14 / 4);
 	float targetDistanceSpotLight = 70;      //up to distance of max intensity
-    vec3 ambientLight = vec3(0.3,0.3, 0.3);
+    vec3 ambientLight = ndubo.ambientLightValue;
 
 
 	vec3  diffColor = texture(texSampler, fragTexCoord).rgb;
@@ -158,7 +163,7 @@ void main() {
 	color += spot_light_color(fragPos,
 							  gubo.rightRearLightPos,
 							  gubo.carLightDir,
-							  gubo.backLightsColor * 0.5,
+							  gubo.backLightsColor * ndubo.backLightsMultiplicationTerm,
 							  cosineInnerSpotLight,
 							  cosineOuterSpotLight,
 							  targetDistanceSpotLight * 0.1,
@@ -171,7 +176,7 @@ void main() {
 	color += spot_light_color(fragPos,
 							  gubo.leftRearLightPos,
 							  gubo.carLightDir,
-							  gubo.backLightsColor * 0.5,
+							  gubo.backLightsColor * ndubo.backLightsMultiplicationTerm,
 							  cosineInnerSpotLight,
 							  cosineOuterSpotLight,
 							  targetDistanceSpotLight * 0.1,

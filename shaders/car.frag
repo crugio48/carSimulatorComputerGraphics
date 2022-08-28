@@ -1,11 +1,17 @@
 #version 450
 
+layout(set = 0, binding = 0) uniform NightDayUniformBufferObject {
+	vec3 directLightValue;
+	vec3 carLightValue;
+	vec3 ambientLightValue;
+	float backLightsMultiplicationTerm;
+} ndubo;
+
 layout(set=1, binding = 1) uniform sampler2D texSampler;
 
 layout(location = 0) in vec3 fragViewDir;
 layout(location = 1) in vec3 fragNorm;
 layout(location = 2) in vec2 fragTexCoord;
-layout(location = 3) in vec3 fragPos;
 
 layout(location = 0) out vec4 outColor;
 
@@ -47,12 +53,12 @@ vec3 Phong_Specular_BRDF(vec3 L, vec3 N, vec3 V, vec3 C, float gamma)  {
 void main() {
 	//make sure direct light dir and color and ambient light is the same for both day fragment shaders
     vec3 directLightDirection = normalize(vec3(0.2, 1.0, 0.2)); 
-	vec3 directLightColor = vec3(0.1, 0.1, 0.1);
-	vec3 ambientLight = vec3(0.01,0.01, 0.01);
+	vec3 directLightColor = ndubo.directLightValue;
+	vec3 ambientLight = ndubo.ambientLightValue;
 
 
 	vec3  diffColor = texture(texSampler, fragTexCoord).rgb;
-	vec3  specColor = vec3(0.01, 0.01, 0.01);
+	vec3  specColor = vec3(1.0, 1.0, 1.0);
 	float specPower = 200.0;
 	
 	vec3 normal = normalize(fragNorm);

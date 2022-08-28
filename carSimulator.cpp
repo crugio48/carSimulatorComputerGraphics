@@ -1,24 +1,18 @@
 //#define NDEBUG     //comment out if debug needed
 #include "VulkanApp.hpp"
 
-#define DAY      //comment out to get night mode
-
 const std::string CAR_MODEL_PATH = "models/car m1 v3.obj";
 const std::string CAR_TEXTURE_PATH = "textures/car m1 texture.png";
 
 const std::string TERRAIN_MODEL_PATH = "models/final 3d map.obj";
 const std::string TERRAIN_TEXTURE_PATH = "textures/terrain texture.png";
 
-const std::string VERTEX_SHADER_PATH = "shaders/vert.spv";
-#ifdef DAY
-const std::string CAR_FRAGMENT_SHADER_PATH = "shaders/car_day_frag.spv";
-const std::string TERRAIN_FRAGMENT_SHADER_PATH = "shaders/terrain_day_frag.spv";
-VkClearColorValue backgroundColor = {0.529f, 0.807f, 0.901f, 1.0f};
-#else
-const std::string CAR_FRAGMENT_SHADER_PATH = "shaders/car_night_frag.spv";
-const std::string TERRAIN_FRAGMENT_SHADER_PATH = "shaders/terrain_night_frag.spv";
-VkClearColorValue backgroundColor = {0.0f, 0.0f, 0.0f, 1.0f};
-#endif
+const std::string CAR_VERTEX_SHADER_PATH = "shaders/car_vert.spv";
+const std::string CAR_FRAGMENT_SHADER_PATH = "shaders/car_frag.spv";
+const std::string TERRAIN_VERTEX_SHADER_PATH = "shaders/terrain_vert.spv";
+const std::string TERRAIN_FRAGMENT_SHADER_PATH = "shaders/terrain_frag.spv";
+VkClearColorValue backgroundColor = {0.0f, 0.1f, 0.3f, 1.0f};
+
 
 const std::string HEIGHT_MAP_PATH = "maps/height map.png";
 const std::string NORMAL_MAP_PATH = "maps/normal map.png";
@@ -35,9 +29,14 @@ const float CAMERA_HEIGHT = 3.0;
 
 
 // The uniform buffer objects used
-struct GlobalUniformBufferObject {
-	alignas(16) glm::mat4 view;
-	alignas(16) glm::mat4 proj;
+struct NightDayUniformBufferObject {
+	alignas(16) glm::vec3 directLightValue;
+	alignas(16) glm::vec3 carLightValue;
+	alignas(16) glm::vec3 ambientLightValue;
+	alignas(4) float backLightsMultiplicationTerm;
+};
+
+struct LightsUniformBufferObject {
 	alignas(16) glm::vec3 rightFrontLightPos;
 	alignas(16) glm::vec3 leftFrontLightPos;
 	alignas(16) glm::vec3 carLightDir;
@@ -48,6 +47,8 @@ struct GlobalUniformBufferObject {
 
 struct UniformBufferObject {
 	alignas(16) glm::mat4 model;
+	alignas(16) glm::mat4 view;
+	alignas(16) glm::mat4 proj;
 };
 
 
@@ -157,6 +158,9 @@ struct MovementInfo {
 	glm::vec3 leftRearCarLightPos;
 	glm::vec3 backLightsColorForBraking;
 
+	
+	int isDay;
+
 };
 
 
@@ -165,7 +169,8 @@ class MyProject : public BaseProject {
 	// Here you list all the Vulkan objects you need:
 	
 	// Descriptor Layouts [what will be passed to the shaders]
-	DescriptorSetLayout globalDSL;
+	DescriptorSetLayout nightDayDSL;
+	DescriptorSetLayout lightsDSL;
 	DescriptorSetLayout objectDSL;
 
 	// Pipelines [Shader couples]
@@ -173,7 +178,9 @@ class MyProject : public BaseProject {
 	Pipeline terrainPipeline;
 
 	// Models, textures and Descriptors (values assigned to the uniforms)
-	DescriptorSet globalDescriptorSet;
+	DescriptorSet nightDayDescriptorSet;
+
+	DescriptorSet lightsDescriptorSet;
 
 	Model carModel;
 	Texture carTexture;
@@ -202,9 +209,9 @@ class MyProject : public BaseProject {
 		initialBackgroundColor = backgroundColor;
 		
 		// Descriptor pool sizes
-		uniformBlocksInPool = 3;        //how many descriptor sets??
+		uniformBlocksInPool = 4;        //how many descriptor sets??
 		texturesInPool = 2;
-		setsInPool = 3;
+		setsInPool = 4;
 	}
 	
 	/**
@@ -213,14 +220,18 @@ class MyProject : public BaseProject {
 	 */
 	void localInit() {
 		// Descriptor Layouts [what will be passed to the shaders]
-		globalDSL.init(this, {
+
+		lightsDSL.init(this, {
 								// this array contains the binding:
 								// first  element : the binding number
 								// second element : the time of element (buffer or texture)
 								// third  element : the pipeline stage where it will be used
-								{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_ALL_GRAPHICS}	
+								{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT}	
 							 });
 
+		nightDayDSL.init(this, {
+								{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT}
+							 });
 
 		objectDSL.init(this, {
 								{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
@@ -230,8 +241,8 @@ class MyProject : public BaseProject {
 		// Pipelines [Shader couples]
 		// The last array, is a vector of pointer to the layouts of the sets that will
 		// be used in this pipeline. The first element will be set 0, and so on..
-		carPipeline.init(this, VERTEX_SHADER_PATH, CAR_FRAGMENT_SHADER_PATH, {&globalDSL, &objectDSL});
-		terrainPipeline.init(this, VERTEX_SHADER_PATH, TERRAIN_FRAGMENT_SHADER_PATH, {&globalDSL, &objectDSL});
+		carPipeline.init(this, CAR_VERTEX_SHADER_PATH, CAR_FRAGMENT_SHADER_PATH, {&nightDayDSL, &objectDSL});
+		terrainPipeline.init(this, TERRAIN_VERTEX_SHADER_PATH, TERRAIN_FRAGMENT_SHADER_PATH, {&nightDayDSL, &lightsDSL, &objectDSL});
 
 
 		// Models, textures and Descriptors (values assigned to the uniforms)
@@ -255,9 +266,13 @@ class MyProject : public BaseProject {
 					{1, TEXTURE, 0, &terrainTexture}
 				});
 
+
+		nightDayDescriptorSet.init(this, &nightDayDSL, {
+			{0, UNIFORM, sizeof(NightDayUniformBufferObject), nullptr}
+		});
 		
-		globalDescriptorSet.init(this, &globalDSL, {
-			{0, UNIFORM, sizeof(GlobalUniformBufferObject), nullptr}
+		lightsDescriptorSet.init(this, &lightsDSL, {
+			{0, UNIFORM, sizeof(LightsUniformBufferObject), nullptr}
 		});
 
 
@@ -282,12 +297,14 @@ class MyProject : public BaseProject {
 		terrainTexture.cleanup();
 		terrainModel.cleanup();
 
-		globalDescriptorSet.cleanup();
+		nightDayDescriptorSet.cleanup();
+		lightsDescriptorSet.cleanup();
 
 		carPipeline.cleanup();
 		terrainPipeline.cleanup();
 		
-		globalDSL.cleanup();
+		nightDayDSL.cleanup();
+		lightsDSL.cleanup();
 		objectDSL.cleanup();
 
 		heightMap.cleanup();
@@ -302,15 +319,15 @@ class MyProject : public BaseProject {
 	 */
 	void populateCommandBuffer(VkCommandBuffer commandBuffer, int currentImage) {
 		
-		//TERRAIN PIPELINE	
+		//CAR PIPELINE	
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
 					carPipeline.graphicsPipeline);
 
-		///////////////////////////////                    GLOBAL
+		///////////////////////////////                    NIGHT/DAY
 
 		vkCmdBindDescriptorSets(commandBuffer,
 						VK_PIPELINE_BIND_POINT_GRAPHICS,
-						carPipeline.pipelineLayout, 0, 1, &globalDescriptorSet.descriptorSets[currentImage],
+						carPipeline.pipelineLayout, 0, 1, &nightDayDescriptorSet.descriptorSets[currentImage],
 						0, nullptr);
 
 				
@@ -340,11 +357,19 @@ class MyProject : public BaseProject {
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, 
 					terrainPipeline.graphicsPipeline);
 
-		///////////////////////////////                    GLOBAL
+
+		///////////////////////////////                    NIGHT/DAY
 
 		vkCmdBindDescriptorSets(commandBuffer,
 						VK_PIPELINE_BIND_POINT_GRAPHICS,
-						terrainPipeline.pipelineLayout, 0, 1, &globalDescriptorSet.descriptorSets[currentImage],
+						terrainPipeline.pipelineLayout, 0, 1, &nightDayDescriptorSet.descriptorSets[currentImage],
+						0, nullptr);
+
+		///////////////////////////////                    LIGHTS
+
+		vkCmdBindDescriptorSets(commandBuffer,
+						VK_PIPELINE_BIND_POINT_GRAPHICS,
+						terrainPipeline.pipelineLayout, 1, 1, &lightsDescriptorSet.descriptorSets[currentImage],
 						0, nullptr);
 
 		///////////////////////////////                   TERRAIN
@@ -357,7 +382,7 @@ class MyProject : public BaseProject {
 
 		vkCmdBindDescriptorSets(commandBuffer,
 								VK_PIPELINE_BIND_POINT_GRAPHICS,
-						        terrainPipeline.pipelineLayout, 1, 1, &terrainDescriptorSet.descriptorSets[currentImage],
+						        terrainPipeline.pipelineLayout, 2, 1, &terrainDescriptorSet.descriptorSets[currentImage],
 						        0, nullptr);
 
 		vkCmdDrawIndexed(commandBuffer,
@@ -379,6 +404,8 @@ class MyProject : public BaseProject {
 		float deltaT = time - lastTime;
 		lastTime = time;
 
+		static float debounce = time;
+
 		static float aspectRatio = ((float) swapChainExtent.width) / (float) swapChainExtent.height;
 		static float nearPlane = 1;
 		static float farPlane = 600;
@@ -388,29 +415,70 @@ class MyProject : public BaseProject {
 		updateMovementInfo(deltaT);
 
 
-		GlobalUniformBufferObject gubo{};
+
+		NightDayUniformBufferObject ndubo{};
+		LightsUniformBufferObject lubo{};
 		UniformBufferObject ubo{};
 		void* data;	
 
-		gubo.view = glm::lookAt(movInfo.cameraPosition, movInfo.carPosition, movInfo.upVector);
+		//////////////////////////////// night/day values
 
-		gubo.proj = glm::perspective(glm::radians(90.0f), 
+		if (glfwGetKey(window, GLFW_KEY_N)) {
+			if(time - debounce > 0.33) {
+				if (movInfo.isDay) {
+					movInfo.isDay = 0;
+				}
+				else {
+					movInfo.isDay = 1;
+				}
+
+				debounce = time;
+			}
+		}
+
+		if (movInfo.isDay) {
+			ndubo.directLightValue = glm::vec3(1, 1, 1);
+			ndubo.carLightValue = glm::vec3(0.1, 0.1, 0.1);
+			ndubo.ambientLightValue = glm::vec3(0.3, 0.3, 0.3);
+			ndubo.backLightsMultiplicationTerm = 0.5;
+		}
+		else {
+			ndubo.directLightValue = glm::vec3(0.1, 0.1, 0.1);
+			ndubo.carLightValue = glm::vec3(1, 1, 1);
+			ndubo.ambientLightValue = glm::vec3(0.01, 0.01, 0.01);
+			ndubo.backLightsMultiplicationTerm = 1;
+		}
+
+		// Here is where you actually update your uniforms
+		vkMapMemory(device, nightDayDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(ndubo), 0, &data);
+			memcpy(data, &ndubo, sizeof(ndubo));
+		vkUnmapMemory(device, nightDayDescriptorSet.uniformBuffersMemory[0][currentImage]);
+
+
+
+		///////////////////////////// lights values
+
+		lubo.rightFrontLightPos = movInfo.rightFrontCarLightPos;
+		lubo.leftFrontLightPos = movInfo.leftFrontCarLightPos;
+		lubo.carLightDir = movInfo.carDirection;
+		lubo.rightRearLightPos = movInfo.rightRearCarLightPos;
+		lubo.leftRearLightPos = movInfo.leftRearCarLightPos;
+		lubo.backLightsColor = movInfo.backLightsColorForBraking;
+
+		vkMapMemory(device, lightsDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(lubo), 0, &data);
+			memcpy(data, &lubo, sizeof(lubo));
+		vkUnmapMemory(device, lightsDescriptorSet.uniformBuffersMemory[0][currentImage]);
+
+
+		/////////////////////////////// general view and proj
+
+		ubo.view = glm::lookAt(movInfo.cameraPosition, movInfo.carPosition, movInfo.upVector);
+
+		ubo.proj = glm::perspective(glm::radians(90.0f), 
 									aspectRatio,
 									nearPlane,
 									farPlane);
-		gubo.proj[1][1] *= -1;
-		gubo.rightFrontLightPos = movInfo.rightFrontCarLightPos;
-		gubo.leftFrontLightPos = movInfo.leftFrontCarLightPos;
-		gubo.carLightDir = movInfo.carDirection;
-		gubo.rightRearLightPos = movInfo.rightRearCarLightPos;
-		gubo.leftRearLightPos = movInfo.leftRearCarLightPos;
-		gubo.backLightsColor = movInfo.backLightsColorForBraking;
-
-		// Here is where you actually update your uniforms
-		vkMapMemory(device, globalDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(gubo), 0, &data);
-			memcpy(data, &gubo, sizeof(gubo));
-		vkUnmapMemory(device, globalDescriptorSet.uniformBuffersMemory[0][currentImage]);
-
+		ubo.proj[1][1] *= -1;
 		
 		///////////////////////////////////   car movement
 
@@ -494,6 +562,9 @@ class MyProject : public BaseProject {
 		movInfo.rightRearCarLightPos = movInfo.carPosition;
 		movInfo.leftRearCarLightPos = movInfo.carPosition;
 		movInfo.backLightsColorForBraking = glm::vec3(0.0, 0.0, 0.0);
+
+
+		movInfo.isDay = 1;
 	}
 
 
