@@ -5,13 +5,13 @@ const std::string CAR_MODEL_PATH = "models/car m1 v3.obj";
 const std::string CAR_TEXTURE_PATH = "textures/car m1 texture.png";
 
 const std::string TERRAIN_MODEL_PATH = "models/final 3d map.obj";
-const std::string TERRAIN_TEXTURE_PATH = "textures/terrain texture.png";
+const std::string TERRAIN_TEXTURE_PATH = "textures/terrain texture 2.png";
 
 const std::string CAR_VERTEX_SHADER_PATH = "shaders/car_vert.spv";
 const std::string CAR_FRAGMENT_SHADER_PATH = "shaders/car_frag.spv";
 const std::string TERRAIN_VERTEX_SHADER_PATH = "shaders/terrain_vert.spv";
 const std::string TERRAIN_FRAGMENT_SHADER_PATH = "shaders/terrain_frag.spv";
-VkClearColorValue backgroundColor = {0.0f, 0.1f, 0.3f, 1.0f};
+VkClearColorValue backgroundColor = {0.0f, 0.03f, 0.2f, 1.0f};
 
 
 const std::string HEIGHT_MAP_PATH = "maps/height map.png";
@@ -440,13 +440,13 @@ class MyProject : public BaseProject {
 			ndubo.directLightValue = glm::vec3(1, 1, 1);
 			ndubo.carLightValue = glm::vec3(0.1, 0.1, 0.1);
 			ndubo.ambientLightValue = glm::vec3(0.3, 0.3, 0.3);
-			ndubo.backLightsMultiplicationTerm = 0.5;
+			ndubo.backLightsMultiplicationTerm = 0.1;
 		}
 		else {
 			ndubo.directLightValue = glm::vec3(0.1, 0.1, 0.1);
 			ndubo.carLightValue = glm::vec3(1, 1, 1);
 			ndubo.ambientLightValue = glm::vec3(0.01, 0.01, 0.01);
-			ndubo.backLightsMultiplicationTerm = 1;
+			ndubo.backLightsMultiplicationTerm = 0.5;
 		}
 
 		// Here is where you actually update your uniforms
