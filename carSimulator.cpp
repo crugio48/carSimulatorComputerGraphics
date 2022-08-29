@@ -11,7 +11,7 @@ const std::string CAR_VERTEX_SHADER_PATH = "shaders/car_vert.spv";
 const std::string CAR_FRAGMENT_SHADER_PATH = "shaders/car_frag.spv";
 const std::string TERRAIN_VERTEX_SHADER_PATH = "shaders/terrain_vert.spv";
 const std::string TERRAIN_FRAGMENT_SHADER_PATH = "shaders/terrain_frag.spv";
-VkClearColorValue backgroundColor = {0.0f, 0.03f, 0.2f, 1.0f};
+VkClearColorValue backgroundColor = {0.0f, 0.025f, 0.175f, 1.0f};
 
 
 const std::string HEIGHT_MAP_PATH = "maps/height map.png";
@@ -28,7 +28,12 @@ const float CAMERA_DISTANCE = 5.0;
 const float CAMERA_HEIGHT = 3.0;
 
 
-// The uniform buffer objects used
+////////////////////        The uniform buffer objects used
+
+/**
+ * @brief uniform buffer for changing night and day mode
+ * 
+ */
 struct NightDayUniformBufferObject {
 	alignas(16) glm::vec3 directLightValue;
 	alignas(16) glm::vec3 carLightValue;
@@ -36,6 +41,10 @@ struct NightDayUniformBufferObject {
 	alignas(4) float backLightsMultiplicationTerm;
 };
 
+/**
+ * @brief uniform buffer for passing the car lights parameters to the shaders
+ * 
+ */
 struct LightsUniformBufferObject {
 	alignas(16) glm::vec3 rightFrontLightPos;
 	alignas(16) glm::vec3 leftFrontLightPos;
@@ -45,6 +54,10 @@ struct LightsUniformBufferObject {
 	alignas(16) glm::vec3 backLightsColor;
 };
 
+/**
+ * @brief uniform buffer for the main matrixes of MVP transorm
+ * 
+ */
 struct UniformBufferObject {
 	alignas(16) glm::mat4 model;
 	alignas(16) glm::mat4 view;
@@ -52,7 +65,10 @@ struct UniformBufferObject {
 };
 
 
-//Struct for height and normal map
+/**
+ * @brief Struct for height and normal map
+ * 
+ */
 struct ImageInfo {
 
 	stbi_uc* pixels;
@@ -61,6 +77,14 @@ struct ImageInfo {
     float mapHeight;
 	float mapWidthX, mapWidthZ;  //half width
 
+	/**
+	 * @brief load image
+	 * 
+	 * @param file 
+	 * @param maxHeightOfMap 
+	 * @param widthOfMapX 
+	 * @param widthOfMapZ 
+	 */
 	void initImage(std::string file, float maxHeightOfMap, float widthOfMapX, float widthOfMapZ) {
 		pixels = stbi_load(file.c_str(), &imageWidth, &imageHeight, &imageChannels, STBI_rgb_alpha);
 
@@ -73,6 +97,15 @@ struct ImageInfo {
 		mapWidthZ = widthOfMapZ;
 	}
 	
+	/**
+	 * @brief Get the Pixel Colors object (JUST FOR DEBUGGING)
+	 * 
+	 * @param x 
+	 * @param y 
+	 * @param red 
+	 * @param green 
+	 * @param blue 
+	 */
 	void getPixelColors(size_t x, size_t y, float *red, float *green, float *blue) {
 		stbi_uc r = pixels[4 * (y * imageWidth + x) + 0];
 		stbi_uc g = pixels[4 * (y * imageWidth + x) + 1];
@@ -84,6 +117,13 @@ struct ImageInfo {
 
 	}
 
+	/**
+	 * @brief Get the Normal Vector from the normal map
+	 * 
+	 * @param xCoord 
+	 * @param zCoord 
+	 * @return glm::vec3 
+	 */
 	glm::vec3 getNormalVector(float xCoord, float zCoord) {
 
 		float temp = xCoord + mapWidthX;
@@ -108,6 +148,13 @@ struct ImageInfo {
 		return returnVector;
 	}
 
+	/**
+	 * @brief Get the Height Value from height map
+	 * 
+	 * @param xCoord 
+	 * @param zCoord 
+	 * @return float 
+	 */
 	float getHeightValue(float xCoord, float zCoord) {
 
 		float temp = xCoord + mapWidthX;
@@ -128,12 +175,19 @@ struct ImageInfo {
         return height;
 	}
 
+	/**
+	 * @brief cleanup resources
+	 * 
+	 */
 	void cleanup(){
 		stbi_image_free(pixels);
 	}
 };
 
-//movement struct
+/**
+ * @brief struct for keeping all information updated from frame to frame
+ * 
+ */
 struct MovementInfo {
 	glm::vec3 cameraPosition;
 	glm::vec3 carPosition;
@@ -209,9 +263,9 @@ class MyProject : public BaseProject {
 		initialBackgroundColor = backgroundColor;
 		
 		// Descriptor pool sizes
-		uniformBlocksInPool = 4;        //how many descriptor sets??
-		texturesInPool = 2;
-		setsInPool = 4;
+		uniformBlocksInPool = 4;   //number of uniform buffers
+		texturesInPool = 2;      //number of textures
+		setsInPool = 4;          //number of descriptor sets
 	}
 	
 	/**
@@ -406,6 +460,7 @@ class MyProject : public BaseProject {
 
 		static float debounce = time;
 
+		/////////////////////////////////   projection matrix parameters
 		static float aspectRatio = ((float) swapChainExtent.width) / (float) swapChainExtent.height;
 		static float nearPlane = 1;
 		static float farPlane = 600;
@@ -773,6 +828,9 @@ class MyProject : public BaseProject {
 									  -movInfo.carDirection * CAR_SCALE * frontDisplacement + 
 									  perpendicularDirection * CAR_SCALE * lateralDisplacement;
 
+
+
+		//print debugging info
 
 		//std::cout << movInfo.velocity << "\n";
 		//std::cout << movInfo.carDirection.x << " " << movInfo.carDirection.y << " " << movInfo.carDirection.z << " " << "\n";
