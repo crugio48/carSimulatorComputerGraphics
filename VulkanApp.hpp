@@ -141,7 +141,7 @@ struct Vertex {
 	}
 
     /**
-     * @brief override operation to create a map in loadModel
+     * @brief override equals operation to create a map in loadModel
      * 
      * @param other 
      * @return true 
@@ -153,7 +153,7 @@ struct Vertex {
 };
 
 /**
- * @brief needed to create map 
+ * @brief hash function needed to create an  unordered map 
  * 
  */
 namespace std {
