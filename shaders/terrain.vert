@@ -18,7 +18,7 @@ layout(location = 3) out vec3 fragPos;
 void main() {
 	gl_Position = ubo.MVPmatrix * vec4(pos, 1.0);
 	fragViewDir  = (ubo.view[3]).xyz - (ubo.model * vec4(pos,  1.0)).xyz;
-	fragNorm     = (ubo.model * vec4(norm, 0.0)).xyz;
+	fragNorm     = (ubo.model * vec4(normalize(norm), 0.0)).xyz;
 	fragTexCoord = texCoord;
 	fragPos = (ubo.model * vec4(pos, 1.0)).xyz;
 }
