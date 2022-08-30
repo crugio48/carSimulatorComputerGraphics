@@ -61,7 +61,7 @@ struct LightsUniformBufferObject {
 struct UniformBufferObject {
 	alignas(16) glm::mat4 model;
 	alignas(16) glm::mat4 view;
-	alignas(16) glm::mat4 proj;
+	alignas(16) glm::mat4 MVPmatrix;
 };
 
 
@@ -529,11 +529,11 @@ class MyProject : public BaseProject {
 
 		ubo.view = glm::lookAt(movInfo.cameraPosition, movInfo.carPosition, movInfo.upVector);
 
-		ubo.proj = glm::perspective(glm::radians(90.0f), 
+		glm::mat4 proj = glm::perspective(glm::radians(90.0f), 
 									aspectRatio,
 									nearPlane,
 									farPlane);
-		ubo.proj[1][1] *= -1;
+		proj[1][1] *= -1;
 		
 		///////////////////////////////////   car movement
 
@@ -541,6 +541,8 @@ class MyProject : public BaseProject {
 		ubo.model = glm::translate(glm::mat4(1), movInfo.carPosition) * 
 					movInfo.carRotation *
 					glm::scale(glm::mat4(1), glm::vec3(CAR_SCALE, CAR_SCALE, CAR_SCALE));
+
+		ubo.MVPmatrix = proj * ubo.view * ubo.model;
 
 		vkMapMemory(device, carDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo), 0, &data);
 		    memcpy(data, &ubo, sizeof(ubo));
@@ -551,6 +553,8 @@ class MyProject : public BaseProject {
 		///////////////////////////// terrain 
 
 		ubo.model = movInfo.terrainTransform;
+
+		ubo.MVPmatrix = proj * ubo.view * ubo.model;
 
 		vkMapMemory(device, terrainDescriptorSet.uniformBuffersMemory[0][currentImage], 0, sizeof(ubo), 0, &data);
 		    memcpy(data, &ubo, sizeof(ubo));
