@@ -1092,7 +1092,7 @@ protected:
 
 	// Lesson 22.2
 	/**
-     * @brief Create a Framebuffers objects
+     * @brief Create a Framebuffers objects (bind imageviews with attachments)
      * 
      */
     void createFramebuffers() {
@@ -1597,7 +1597,6 @@ protected:
 	/**
      * @brief Create a Command Buffer object -> (these are automatically freed upon freeing their command pool)
      * 
-	 * @todo maybe add functionality to reset and record new command buffers via .cpp application
      */
     void createCommandBuffers() {
     	// Lesson 13
@@ -1904,6 +1903,7 @@ void Model::createVertexBuffer() {
 
 /**
  * @brief Create a Index Buffer object -> (indexed list for the vertex)
+ * using staging buffer for better performance
  * 
  */
 void Model::createIndexBuffer() {
